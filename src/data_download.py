@@ -1,79 +1,94 @@
-# src/data_download.py
+# coding=utf8
 """
-数据获取脚本 - 使用 AkShare 下载 A 股日线数据（适配 v1.10+）
+Created on Thu Sep 5 11:02:00 2025
 作者: 梁嘉文
 项目: G1VENQUANT
 """
 
 import os
-import akshare as ak
+import tushare as ts
 import pandas as pd
-from datetime import datetime
+from tqdm import tqdm
 
-# ========== 配置区 ==========
-STOCK_CODES = ["000001", "600519", "300750"]  # 平安银行、贵州茅台、宁德时代
+# ===== 配置区 =====
+TOKEN = "9bb81649792cc92d8e0ed2a5789d47b4bcd74a53b224ce44f3a4e0e6"  # 老师提供的 token
+DATA_DIR = "./data/tushare_selected_stocks"  # 数据保存目录
 START_DATE = "20150101"
-END_DATE = datetime.today().strftime("%Y%m%d")
-SAVE_TO_LOCAL = True
-DATA_DIR = "data/raw"  # 注意：相对路径，确保 data/raw 存在
+END_DATE = "20251231"
 
-# ========== 主逻辑 ==========
-def fetch_stock_daily(stock_code: str, start: str, end: str) -> pd.DataFrame:
-    """获取单只股票的日线数据（前复权）"""
+# 🔴 在这里指定你要下载的股票（使用 Tushare 的 ts_code 格式）
+# 格式：'股票代码.交易所'，如 '000001.SZ'（平安银行）、'600519.SH'（贵州茅台）
+SELECTED_STOCKS = [
+    '000001.SZ',  # 平安银行
+    '600519.SH',  # 贵州茅台
+    '300750.SZ',  # 宁德时代
+    '000858.SZ',  # 五粮液
+    '601318.SH',  # 中国平安
+    # 你可以在这里继续添加
+]
+
+# 创建目录
+os.makedirs(DATA_DIR, exist_ok=True)
+
+# 初始化 Tushare
+ts.set_token(TOKEN)
+pro = ts.pro_api()
+
+def download_stock_data(ts_code, start, end):
+    """下载单只股票的前复权日线数据"""
     try:
-        # 自动判断市场
-        if stock_code.startswith(("6", "9")):  # 沪市：60/68/90 开头
-            symbol = f"{stock_code}.SH"
-        else:  # 深市：00/30 开头
-            symbol = f"{stock_code}.SZ"
-        
-        # 调用 AkShare 接口（新版返回英文列名）
-        df = ak.stock_zh_a_hist(
-            symbol=symbol,
-            period="daily",
+        symbol = ts_code.split('.')[0]  # 提取纯数字代码，如 '000001'
+        df = ts.pro_bar(
+            ts_code=ts_code,
+            adj='qfq',
             start_date=start,
             end_date=end,
-            adjust="qfq"  # 前复权
+            freq='D'
         )
-        
-        if df.empty:
-            return df
-        
-        # 新版 AkShare 已返回英文列名，无需重命名
-        # 但为保险起见，可统一列名（防止未来变动）
-        expected_cols = ['date', 'open', 'high', 'low', 'close', 'volume', 'amount']
-        if not all(col in df.columns for col in expected_cols):
-            print(f"⚠️  {stock_code} 返回列不匹配: {df.columns.tolist()}")
-            return pd.DataFrame()
-        
-        df = df[expected_cols].copy()
-        df['code'] = stock_code
-        df['date'] = pd.to_datetime(df['date'])
-        df.set_index('date', inplace=True)
-        return df
+        if df is None or df.empty:
+            return False
 
+        # 整理字段
+        df = df.rename(columns={
+            'trade_date': 'datetime',
+            'open': 'open',
+            'high': 'high',
+            'low': 'low',
+            'close': 'close',
+            'vol': 'volume',
+            'amount': 'amount'
+        })
+        df['datetime'] = pd.to_datetime(df['datetime'], format='%Y%m%d')
+        df = df.sort_values('datetime').reset_index(drop=True)
+
+        # 保存为 CSV
+        output_path = os.path.join(DATA_DIR, f"{symbol}.csv")
+        df.to_csv(output_path, index=False, encoding='utf-8')
+        return True
     except Exception as e:
-        print(f"❌ 获取 {stock_code} 失败: {e}")
-        return pd.DataFrame()
+        print(f"\n⚠️ 下载 {ts_code} 出错: {e}")
+        return False
 
 def main():
-    os.makedirs(DATA_DIR, exist_ok=True)
-    
-    for code in STOCK_CODES:
-        print(f"📥 正在获取 {code} 的数据...")
-        df = fetch_stock_daily(code, START_DATE, END_DATE)
-        
-        if not df.empty:
-            print(f"✅ 获取 {code} 成功，共 {len(df)} 条记录")
-            
-            if SAVE_TO_LOCAL:
-                filepath = os.path.join(DATA_DIR, f"{code}.csv")
-                df.to_csv(filepath)
-                print(f"💾 已保存至 {filepath}")
-            else:
-                print(df.head(3))
-        else:
-            print(f"⚠️  {code} 无有效数据")
+    total = len(SELECTED_STOCKS)
+    print(f"准备下载 {total} 只指定股票的数据...")
+    print("股票列表:", SELECTED_STOCKS)
+
+    success_count = 0
+    # 使用 tqdm 显示进度条
+    for ts_code in tqdm(SELECTED_STOCKS, desc="Downloading"):
+        symbol = ts_code.split('.')[0]
+        file_path = os.path.join(DATA_DIR, f"{symbol}.csv")
+
+        # 跳过已存在的文件（断点续传）
+        if os.path.exists(file_path):
+            continue
+
+        if download_stock_data(ts_code, START_DATE, END_DATE):
+            success_count += 1
+
+    print(f"\n✅ 下载完成！成功: {success_count}/{total} 只股票")
+    print(f"数据保存在: {os.path.abspath(DATA_DIR)}")
 
 if __name__ == "__main__":
     main()
