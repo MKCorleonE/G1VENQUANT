@@ -1,6 +1,6 @@
-# scripts/fetch_data.py
+# src/data_download.py
 """
-数据获取脚本 - 使用 AkShare 下载 A 股日线数据
+数据获取脚本 - 使用 AkShare 下载 A 股日线数据（适配 v1.10+）
 作者: 梁嘉文
 项目: G1VENQUANT
 """
@@ -11,22 +11,23 @@ import pandas as pd
 from datetime import datetime
 
 # ========== 配置区 ==========
-STOCK_CODES = ["000001", "600519", "300750"]  # 示例股票代码（平安银行、茅台、宁德时代）
+STOCK_CODES = ["000001", "600519", "300750"]  # 平安银行、贵州茅台、宁德时代
 START_DATE = "20150101"
 END_DATE = datetime.today().strftime("%Y%m%d")
-SAVE_TO_LOCAL = True  # ← 设置为 True 则保存 CSV 到本地；False 则仅打印
-DATA_DIR = "../data/raw"
+SAVE_TO_LOCAL = True
+DATA_DIR = "data/raw"  # 注意：相对路径，确保 data/raw 存在
 
 # ========== 主逻辑 ==========
 def fetch_stock_daily(stock_code: str, start: str, end: str) -> pd.DataFrame:
-    """获取单只股票的日线数据"""
+    """获取单只股票的日线数据（前复权）"""
     try:
-        # AkShare 的股票后缀规则：沪市加 .SH，深市加 .SZ
-        if stock_code.startswith("6"):
+        # 自动判断市场
+        if stock_code.startswith(("6", "9")):  # 沪市：60/68/90 开头
             symbol = f"{stock_code}.SH"
-        else:
+        else:  # 深市：00/30 开头
             symbol = f"{stock_code}.SZ"
         
+        # 调用 AkShare 接口（新版返回英文列名）
         df = ak.stock_zh_a_hist(
             symbol=symbol,
             period="daily",
@@ -34,19 +35,23 @@ def fetch_stock_daily(stock_code: str, start: str, end: str) -> pd.DataFrame:
             end_date=end,
             adjust="qfq"  # 前复权
         )
-        df.rename(columns={
-            '日期': 'date',
-            '开盘': 'open',
-            '收盘': 'close',
-            '最高': 'high',
-            '最低': 'low',
-            '成交量': 'volume',
-            '成交额': 'amount'
-        }, inplace=True)
+        
+        if df.empty:
+            return df
+        
+        # 新版 AkShare 已返回英文列名，无需重命名
+        # 但为保险起见，可统一列名（防止未来变动）
+        expected_cols = ['date', 'open', 'high', 'low', 'close', 'volume', 'amount']
+        if not all(col in df.columns for col in expected_cols):
+            print(f"⚠️  {stock_code} 返回列不匹配: {df.columns.tolist()}")
+            return pd.DataFrame()
+        
+        df = df[expected_cols].copy()
         df['code'] = stock_code
         df['date'] = pd.to_datetime(df['date'])
         df.set_index('date', inplace=True)
-        return df[['code', 'open', 'high', 'low', 'close', 'volume', 'amount']]
+        return df
+
     except Exception as e:
         print(f"❌ 获取 {stock_code} 失败: {e}")
         return pd.DataFrame()
@@ -61,13 +66,12 @@ def main():
         if not df.empty:
             print(f"✅ 获取 {code} 成功，共 {len(df)} 条记录")
             
-            # ========== 保存到本地（通过开关控制）==========
             if SAVE_TO_LOCAL:
                 filepath = os.path.join(DATA_DIR, f"{code}.csv")
                 df.to_csv(filepath)
                 print(f"💾 已保存至 {filepath}")
             else:
-                print(df.head(3))  # 仅预览
+                print(df.head(3))
         else:
             print(f"⚠️  {code} 无有效数据")
 

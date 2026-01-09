@@ -1,7 +1,10 @@
 # G1VENQUANT
+![GitHub release](https://img.shields.io/github/v/release/MKCorleonE/G1VENQUANT?style=for-the-badge)
+![GitHub Repo stars](https://img.shields.io/github/stars/MKCorleonE/G1VENQUANT?style=for-the-badge)
+![Downloads](https://img.shields.io/github/downloads/MKCorleonE/G1VENQUANT/total?style=for-the-badge)
+![License](https://img.shields.io/github/license/MKCorleonE/G1VENQUANT?style=for-the-badge)
 
-> A lightweight, open-source quantitative trading framework built on **vn.py**, designed for research, backtesting, and live trading of Chinese equities and futures.  
-> Created by **Liang Jiawen (梁嘉文)**.
+> A lightweight and open-source quantitative trading framework built based on "vn.py", specifically designed for research, backtesting and real-time trading.  
 
 ---
 
