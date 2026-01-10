@@ -6,23 +6,58 @@ G1VENQUANT EDA: Exploratory Data Analysis for selected stocks
 """
 
 import os
+import sys
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy import stats
+from matplotlib import rcParams
 
-# 设置中文字体（避免中文乱码）
-plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans']
-plt.rcParams['axes.unicode_minus'] = False
-sns.set_style("whitegrid")
+# ======================
+# 🔧 全局配置与中文字体设置
+# ======================
 
-# ===== 配置 =====
+# 设置中文字体（自动适配常见系统）
+def set_chinese_font():
+    """智能设置 Matplotlib 中文字体"""
+    if sys.platform.startswith('win'):
+        # Windows: 优先使用 SimHei（黑体）或 Microsoft YaHei（微软雅黑）
+        fonts = ['SimHei', 'Microsoft YaHei']
+    elif sys.platform == 'darwin':
+        # macOS: PingFang 或 Heiti SC
+        fonts = ['PingFang HK', 'Heiti TC', 'Arial Unicode MS']
+    else:
+        # Linux: 文泉驿、Noto 等
+        fonts = ['WenQuanYi Micro Hei', 'Noto Sans CJK SC', 'DejaVu Sans']
+
+    # 尝试找到可用的中文字体
+    from matplotlib.font_manager import FontProperties, findfont
+    available_fonts = []
+    for font in fonts:
+        try:
+            findfont(FontProperties(family=font))
+            available_fonts.append(font)
+        except:
+            continue
+
+    if available_fonts:
+        rcParams['font.sans-serif'] = available_fonts + ['DejaVu Sans']
+        print(f"✅ 使用中文字体: {available_fonts[0]}")
+    else:
+        print("⚠️ 未找到系统中文字体，中文可能显示为方框。建议安装 SimHei 或 Microsoft YaHei。")
+        rcParams['font.sans-serif'] = ['DejaVu Sans']
+
+    rcParams['axes.unicode_minus'] = False  # 正确显示负号
+    sns.set_style("whitegrid")
+
+set_chinese_font()
+
+# 路径配置
 DATA_DIR = "./data/tushare_selected_stocks"
 OUTPUT_FIG_DIR = "./figures"
-os.makedirs(OUTPUT_FIG_DIR, exist_ok=True)
 
-# 股票代码映射（用于显示中文名）
+# 股票代码 → 中文名映射（请根据你的实际股票修改）
 STOCK_NAMES = {
     '000001': '平安银行',
     '600519': '贵州茅台',
@@ -31,118 +66,153 @@ STOCK_NAMES = {
     '601318': '中国平安'
 }
 
+# 创建输出目录
+os.makedirs(OUTPUT_FIG_DIR, exist_ok=True)
+
+# ======================
+# 📥 数据加载
+# ======================
+
 def load_all_stocks():
-    """加载所有股票数据"""
+    """从 CSV 加载所有股票数据"""
+    if not os.path.exists(DATA_DIR):
+        raise FileNotFoundError(f"数据目录不存在: {os.path.abspath(DATA_DIR)}")
+
     stocks = {}
-    for file in os.listdir(DATA_DIR):
-        if file.endswith('.csv'):
-            symbol = file.replace('.csv', '')
-            df = pd.read_csv(os.path.join(DATA_DIR, file))
-            df['datetime'] = pd.to_datetime(df['datetime'])
-            df.set_index('datetime', inplace=True)
-            df.sort_index(inplace=True)
-            stocks[symbol] = df
+    files = [f for f in os.listdir(DATA_DIR) if f.endswith('.csv')]
+    if not files:
+        raise ValueError(f"目录 {DATA_DIR} 中没有 CSV 文件！")
+
+    for file in files:
+        symbol = file.replace('.csv', '')
+        df = pd.read_csv(os.path.join(DATA_DIR, file))
+        df['datetime'] = pd.to_datetime(df['datetime'])
+        df.set_index('datetime', inplace=True)
+        df.sort_index(inplace=True)
+        stocks[symbol] = df
+        print(f"✓ 加载 {symbol} ({STOCK_NAMES.get(symbol, symbol)}) - {len(df)} 条记录")
+
     return stocks
 
+# ======================
+# 📊 可视化函数
+# ======================
+
 def plot_price_and_volume(stocks):
-    """为每只股票画价格+成交量子图"""
+    """单只股票：价格 + 成交量"""
     for symbol, df in stocks.items():
         name = STOCK_NAMES.get(symbol, symbol)
-        fig, axes = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
-        
+        fig, axes = plt.subplots(2, 1, figsize=(12, 7), sharex=True)
+
         # 收盘价
-        axes[0].plot(df.index, df['close'], color='tab:blue')
-        axes[0].set_title(f'{name} ({symbol}) - 复权收盘价', fontsize=14)
+        axes[0].plot(df.index, df['close'], color='tab:blue', linewidth=1)
+        axes[0].set_title(f'{name} ({symbol}) — 复权收盘价', fontsize=14)
         axes[0].set_ylabel('价格 (元)')
-        
-        # 成交量（单位：手 → 转为万股便于阅读）
-        vol = df['volume'] / 100  # 手 → 百股，但通常直接画原始或缩放
-        axes[1].bar(df.index, vol, width=1, color='tab:orange', alpha=0.7)
+
+        # 成交量（单位：手）
+        axes[1].bar(df.index, df['volume'], width=1, color='tab:orange', alpha=0.7)
         axes[1].set_ylabel('成交量 (手)')
         axes[1].set_xlabel('日期')
-        
+
         plt.tight_layout()
-        plt.savefig(os.path.join(OUTPUT_FIG_DIR, f"{symbol}_price_volume.png"), dpi=150)
+        plt.savefig(os.path.join(OUTPUT_FIG_DIR, f"{symbol}_price_volume.png"), dpi=150, bbox_inches='tight')
         plt.close()
 
 def plot_normalized_prices(stocks):
-    """多股票归一化价格对比（从1开始）"""
+    """多股归一化对比"""
     plt.figure(figsize=(14, 8))
     for symbol, df in stocks.items():
         name = STOCK_NAMES.get(symbol, symbol)
-        # 归一化：首日价格为1
         norm_price = df['close'] / df['close'].iloc[0]
-        plt.plot(df.index, norm_price, label=name)
-    
-    plt.title('股票价格走势对比（归一化）', fontsize=16)
-    plt.ylabel('归一化价格（起始=1）')
+        plt.plot(df.index, norm_price, label=name, linewidth=2)
+
+    plt.title('股票价格走势对比（归一化，起始值=1）', fontsize=16)
+    plt.ylabel('归一化价格')
+    plt.xlabel('日期')
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.6)
     plt.tight_layout()
-    plt.savefig(os.path.join(OUTPUT_FIG_DIR, "normalized_prices.png"), dpi=150)
+    plt.savefig(os.path.join(OUTPUT_FIG_DIR, "normalized_prices.png"), dpi=150, bbox_inches='tight')
     plt.close()
 
 def plot_return_distribution(stocks):
-    """画收益率分布（直方图 + 正态拟合）"""
-    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
-    axes = axes.flatten()
-    
+    """收益率分布（直方图 + 正态拟合）"""
+    n = len(stocks)
+    cols = 2
+    rows = (n + 1) // 2
+    fig, axes = plt.subplots(rows, cols, figsize=(14, 5 * rows))
+    if n == 1:
+        axes = [axes]
+    else:
+        axes = axes.flatten()
+
     for idx, (symbol, df) in enumerate(stocks.items()):
-        if idx >= 6:
-            break
         name = STOCK_NAMES.get(symbol, symbol)
         returns = df['close'].pct_change().dropna()
-        
-        ax = axes[idx]
-        # 直方图
-        ax.hist(returns, bins=50, density=True, alpha=0.7, color='skyblue', edgecolor='k')
-        
-        # 正态分布拟合
         mu, sigma = returns.mean(), returns.std()
+
+        # 直方图
+        axes[idx].hist(returns, bins=50, density=True, alpha=0.7, color='skyblue', edgecolor='k')
+
+        # 正态拟合
         x = np.linspace(returns.min(), returns.max(), 100)
-        ax.plot(x, stats.norm.pdf(x, mu, sigma), 'r--', linewidth=2, label='正态拟合')
-        
-        ax.set_title(f'{name} 日收益率分布\nμ={mu:.4f}, σ={sigma:.4f}')
-        ax.legend()
-    
+        axes[idx].plot(x, stats.norm.pdf(x, mu, sigma), 'r--', linewidth=2, label='正态拟合')
+
+        axes[idx].set_title(f'{name} 日收益率分布\n均值={mu:.4f}, 标准差={sigma:.4f}')
+        axes[idx].legend()
+
     # 隐藏多余子图
-    for j in range(len(stocks), 6):
+    for j in range(n, len(axes)):
         axes[j].axis('off')
-    
+
     plt.tight_layout()
-    plt.savefig(os.path.join(OUTPUT_FIG_DIR, "return_distributions.png"), dpi=150)
+    plt.savefig(os.path.join(OUTPUT_FIG_DIR, "return_distributions.png"), dpi=150, bbox_inches='tight')
     plt.close()
 
 def plot_rolling_volatility(stocks, window=20):
-    """滚动波动率（20日年化）"""
+    """滚动波动率（年化）"""
     plt.figure(figsize=(14, 8))
     for symbol, df in stocks.items():
         name = STOCK_NAMES.get(symbol, symbol)
         returns = df['close'].pct_change()
         rolling_std = returns.rolling(window=window).std()
-        annualized_vol = rolling_std * np.sqrt(252)  # 年化
-        plt.plot(annualized_vol.index, annualized_vol, label=name)
-    
+        annualized_vol = rolling_std * np.sqrt(252)
+        plt.plot(annualized_vol.index, annualized_vol, label=name, linewidth=1.5)
+
     plt.title(f'{window}日滚动年化波动率', fontsize=16)
     plt.ylabel('年化波动率')
+    plt.xlabel('日期')
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.6)
     plt.tight_layout()
-    plt.savefig(os.path.join(OUTPUT_FIG_DIR, "rolling_volatility.png"), dpi=150)
+    plt.savefig(os.path.join(OUTPUT_FIG_DIR, "rolling_volatility.png"), dpi=150, bbox_inches='tight')
     plt.close()
 
+# ======================
+# ▶ 主程序
+# ======================
+
 def main():
-    print("正在加载股票数据...")
-    stocks = load_all_stocks()
-    print(f"共加载 {len(stocks)} 只股票")
-    
-    print("正在生成可视化图表...")
-    plot_price_and_volume(stocks)
-    plot_normalized_prices(stocks)
-    plot_return_distribution(stocks)
-    plot_rolling_volatility(stocks)
-    
-    print(f"✅ 所有图表已保存至: {os.path.abspath(OUTPUT_FIG_DIR)}")
+    print("📊 开始 A 股数据探索性分析 (EDA)...")
+    try:
+        stocks = load_all_stocks()
+        print(f"\n📈 共加载 {len(stocks)} 只股票，开始生成图表...\n")
+
+        plot_price_and_volume(stocks)
+        plot_normalized_prices(stocks)
+        plot_return_distribution(stocks)
+        plot_rolling_volatility(stocks)
+
+        print(f"\n✅ 所有图表已成功保存至：{os.path.abspath(OUTPUT_FIG_DIR)}")
+        print("📁 包含：")
+        print("   • 单股价格+成交量图")
+        print("   • 多股归一化走势对比")
+        print("   • 收益率分布直方图")
+        print("   • 滚动波动率时序图")
+
+    except Exception as e:
+        print(f"❌ 发生错误: {e}")
+        raise
 
 if __name__ == "__main__":
     main()
