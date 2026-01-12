@@ -14,48 +14,9 @@ import seaborn as sns
 from scipy import stats
 from matplotlib import rcParams
 
-# ======================
-# 🔧 全局配置与中文字体设置
-# ======================
-
-# 设置中文字体（自动适配常见系统）
-def set_chinese_font():
-    """智能设置 Matplotlib 中文字体"""
-    if sys.platform.startswith('win'):
-        # Windows: 优先使用 SimHei（黑体）或 Microsoft YaHei（微软雅黑）
-        fonts = ['SimHei', 'Microsoft YaHei']
-    elif sys.platform == 'darwin':
-        # macOS: PingFang 或 Heiti SC
-        fonts = ['PingFang HK', 'Heiti TC', 'Arial Unicode MS']
-    else:
-        # Linux: 文泉驿、Noto 等
-        fonts = ['WenQuanYi Micro Hei', 'Noto Sans CJK SC', 'DejaVu Sans']
-
-    # 尝试找到可用的中文字体
-    from matplotlib.font_manager import FontProperties, findfont
-    available_fonts = []
-    for font in fonts:
-        try:
-            findfont(FontProperties(family=font))
-            available_fonts.append(font)
-        except:
-            continue
-
-    if available_fonts:
-        rcParams['font.sans-serif'] = available_fonts + ['DejaVu Sans']
-        print(f"✅ 使用中文字体: {available_fonts[0]}")
-    else:
-        print("⚠️ 未找到系统中文字体，中文可能显示为方框。建议安装 SimHei 或 Microsoft YaHei。")
-        rcParams['font.sans-serif'] = ['DejaVu Sans']
-
-    rcParams['axes.unicode_minus'] = False  # 正确显示负号
-    sns.set_style("whitegrid")
-
-set_chinese_font()
-
-# 路径配置
-DATA_DIR = "./data/tushare_selected_stocks"
-OUTPUT_FIG_DIR = "./figures"
+# ======= 配置区 =======
+DATA_DIR = "./data/tushare_selected_stocks" # 数据存储目录
+OUTPUT_FIG_DIR = "./figures" # 图表存储目录
 
 # 股票代码 → 中文名映射（请根据你的实际股票修改）
 STOCK_NAMES = {
@@ -70,32 +31,39 @@ STOCK_NAMES = {
 os.makedirs(OUTPUT_FIG_DIR, exist_ok=True)
 
 # ======================
-# 📥 数据加载
+# 数据加载
 # ======================
 
 def load_all_stocks():
     """从 CSV 加载所有股票数据"""
+    # 验证数据目录是否存在
     if not os.path.exists(DATA_DIR):
         raise FileNotFoundError(f"数据目录不存在: {os.path.abspath(DATA_DIR)}")
 
+    # 新建字典存储股票数据
     stocks = {}
-    files = [f for f in os.listdir(DATA_DIR) if f.endswith('.csv')]
+
+    files = []
+    for f in os.listdir(DATA_DIR):  # 遍历目录下所有文件和文件夹
+        if f.endswith('.csv'):       # 检查是否以 .csv 结尾
+            files.append(f)          # 符合条件的添加到列表
+    # 验证是否找到任何 CSV 文件
     if not files:
         raise ValueError(f"目录 {DATA_DIR} 中没有 CSV 文件！")
 
     for file in files:
         symbol = file.replace('.csv', '')
         df = pd.read_csv(os.path.join(DATA_DIR, file))
-        df['datetime'] = pd.to_datetime(df['datetime'])
-        df.set_index('datetime', inplace=True)
-        df.sort_index(inplace=True)
-        stocks[symbol] = df
+        df['datetime'] = pd.to_datetime(df['datetime']) # 转换为日期时间格式
+        df.set_index('datetime', inplace=True) # 设置日期为索引
+        df.sort_index(inplace=True) # 按日期排序
+        stocks[symbol] = df # 存入字典
         print(f"✓ 加载 {symbol} ({STOCK_NAMES.get(symbol, symbol)}) - {len(df)} 条记录")
 
     return stocks
 
 # ======================
-# 📊 可视化函数
+# 可视化函数
 # ======================
 
 def plot_price_and_volume(stocks):
@@ -189,7 +157,7 @@ def plot_rolling_volatility(stocks, window=20):
     plt.close()
 
 # ======================
-# ▶ 主程序
+# 主程序
 # ======================
 
 def main():

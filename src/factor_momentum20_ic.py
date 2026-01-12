@@ -1,7 +1,8 @@
 # coding=utf8
 """
-第一步因子研究：20日动量因子 + IC 分析（修复版）
-Author: Neal LONG
+第一步因子研究：20日动量因子 + IC 分析
+作者: 梁嘉文
+项目: G1VENQUANT
 """
 
 import os
@@ -14,7 +15,7 @@ from scipy.stats import spearmanr
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
 
-# ===== 配置 =====
+# ======= 配置区 =======
 DATA_DIR = "./data/tushare_selected_stocks"
 OUTPUT_DIR = "./factor_results"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -30,6 +31,7 @@ STOCK_NAMES = {
 def load_all_data():
     """加载所有股票数据，并合并成面板数据 (date x symbol)"""
     all_dfs = []
+    # 遍历数据目录下所有CSV文件
     for file in os.listdir(DATA_DIR):
         if not file.endswith('.csv'):
             continue
@@ -37,10 +39,12 @@ def load_all_data():
         df = pd.read_csv(os.path.join(DATA_DIR, file))
         df['datetime'] = pd.to_datetime(df['datetime'])
         df['symbol'] = symbol
-        all_dfs.append(df[['datetime', 'symbol', 'close']])
+        all_dfs.append(df[['datetime', 'symbol', 'close']]) # 只保留需要的列
     
+    # 合并所有数据为一个面板数据
     panel = pd.concat(all_dfs, ignore_index=True)
     panel = panel.sort_values(['symbol', 'datetime']).reset_index(drop=True)
+    print(f"面板数据结构预览:\n{panel.head()}")
     return panel
 
 def calculate_momentum_factor(panel, lookback=20):
