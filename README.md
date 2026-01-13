@@ -19,3 +19,6 @@
 ---
 
 ## 📁 Project Structure
+
+## ⭐ Stars
+[![Star History Chart](https://api.star-history.com/svg?repos=MKCorleonE/G1VENQUANT&type=Date&theme=dark)](https://star-history.com/#MKCorleonE/G1VENQUANT&Date)
