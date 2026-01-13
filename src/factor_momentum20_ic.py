@@ -55,7 +55,7 @@ def calculate_momentum_factor(panel, lookback=20):
     # 计算每日简单收益率（用于 future_return）
     panel['return'] = panel.groupby('symbol')['close'].pct_change()
     
-    # ✅ 关键修复：使用 transform 计算动量因子
+    # 使用 transform 计算动量因子
     panel['mom_factor'] = panel.groupby('symbol')['close'].transform(
         lambda x: x.pct_change(periods=lookback)
     )
@@ -63,6 +63,7 @@ def calculate_momentum_factor(panel, lookback=20):
     # 未来一期收益（避免前视偏差）
     panel['future_return'] = panel.groupby('symbol')['return'].shift(-1)
     
+    print(f"动量因子计算预览:\n{panel[['datetime', 'symbol', 'close', 'mom_factor', 'future_return']].head(10)}")
     return panel
 
 def calculate_ic(panel):
@@ -74,7 +75,11 @@ def calculate_ic(panel):
         df_date = panel[panel['datetime'] == date].copy()
         # 去除缺失值
         df_date = df_date.dropna(subset=['mom_factor', 'future_return'])
+
+        # 预览数据
+        print(f"数据预览: \n{df_date[['symbol', 'mom_factor', 'future_return']].head()}")
         
+        # 至少需要2只股票才能计算相关性
         if len(df_date) < 2:
             continue
             
@@ -89,7 +94,7 @@ def calculate_ic(panel):
         raise ValueError("未能计算任何有效 IC 值，请检查数据")
         
     ic_df = pd.DataFrame(ic_list)
-    ic_df['date'] = pd.to_datetime(ic_df['date'])
+    ic_df['date'] = pd.to_datetime(ic_df['date']) # 时间序列索引
     ic_df.set_index('date', inplace=True)
     return ic_df
 
@@ -115,6 +120,37 @@ def plot_ic_analysis(ic_df):
     plt.savefig(os.path.join(OUTPUT_DIR, "momentum_ic_analysis.png"), dpi=150, bbox_inches='tight')
     plt.close()
 
+def analyze_ic_performance(ic_df):
+    """分析IC值的表现"""
+    
+    results = {}
+    
+    # 1. 基本统计特征
+    results['mean_ic'] = ic_df['ic'].mean()           # 平均IC
+    results['std_ic'] = ic_df['ic'].std()             # IC波动率
+    results['ic_ir'] = results['mean_ic'] / results['std_ic']  # 信息比率（ICIR）
+    
+    # 2. 正负比例
+    results['positive_ratio'] = (ic_df['ic'] > 0).mean()      # IC正值比例
+    results['significant_positive_ratio'] = (ic_df['ic'] > 0.05).mean()  # IC显著正值比例
+    
+    # 3. 稳定性
+    results['ic_std_ratio'] = results['std_ic'] / abs(results['mean_ic'])  # 波动相对大小
+    
+    # 4. 时间序列特征
+    # 滚动平均（20天）
+    ic_df['rolling_mean_20'] = ic_df['ic'].rolling(window=20, min_periods=5).mean()
+    ic_df['rolling_std_20'] = ic_df['ic'].rolling(window=20, min_periods=5).std()
+    
+    # 5. 统计检验
+    from scipy import stats
+    t_stat, p_value = stats.ttest_1samp(ic_df['ic'].dropna(), 0)
+    results['t_statistic'] = t_stat
+    results['p_value'] = p_value
+    results['is_significant'] = p_value < 0.05  # 是否统计显著
+    
+    return results, ic_df    
+
 def main():
     print("📊 开始动量因子构建与 IC 分析...")
     
@@ -139,6 +175,22 @@ def main():
     # 4. 可视化
     plot_ic_analysis(ic_df)
     print(f"\n✅ 结果已保存至: {os.path.abspath(OUTPUT_DIR)}")
+
+    ic_stats, ic_df_with_rolling = analyze_ic_performance(ic_df)
+
+    # 3. 打印分析结果
+    print("=" * 50)
+    print("IC值表现分析")
+    print("=" * 50)
+    print(f"平均IC值: {ic_stats['mean_ic']:.4f}")
+    print(f"IC波动率: {ic_stats['std_ic']:.4f}")
+    print(f"信息比率(ICIR): {ic_stats['ic_ir']:.4f}")
+    print(f"IC正值比例: {ic_stats['positive_ratio']:.2%}")
+    print(f"IC显著正值比例(>0.05): {ic_stats['significant_positive_ratio']:.2%}")
+    print(f"t统计量: {ic_stats['t_statistic']:.4f}")
+    print(f"p值: {ic_stats['p_value']:.4f}")
+    print(f"是否统计显著(p<0.05): {ic_stats['is_significant']}")
+    print("=" * 50)
     
     # 5. 保存中间数据
     panel.to_csv(os.path.join(OUTPUT_DIR, "factor_panel.csv"), index=False)
