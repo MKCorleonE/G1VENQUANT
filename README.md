@@ -1,24 +1,49 @@
 # G1VENQUANT
-![GitHub release](https://img.shields.io/github/v/release/MKCorleonE/G1VENQUANT?style=for-the-badge)
-![GitHub Repo stars](https://img.shields.io/github/stars/MKCorleonE/G1VENQUANT?style=for-the-badge)
-![Downloads](https://img.shields.io/github/downloads/MKCorleonE/G1VENQUANT/total?style=for-the-badge)
-![License](https://img.shields.io/github/license/MKCorleonE/G1VENQUANT?style=for-the-badge)
+![Author](https://img.shields.io/badge/Author-MKCorleonE-blue?logo=github
+)
+![LICENSE](https://img.shields.io/badge/license-MIT-green)
 
-> A lightweight and open-source quantitative trading framework built based on "vn.py", specifically designed for research, backtesting and real-time trading.  
+
+> A quantitative self-study practice project has developed a lightweight open-source quantitative trading framework, specifically designed for research, backtesting and real-time trading.
 
 ---
 
 ## 🌟 Features
 
-- **Free data acquisition** via [AkShare](https://akshare.akfamily.xyz/) (no API key required)
-- Modular project structure for easy strategy development
-- Supports historical data download, cleaning, and local storage
-- Ready to integrate with **vn.py** for backtesting and real-time trading
-- Designed for personal research and non-commercial use
+- Detailed data download and processing procedures
+- Complete process of factor construction
+- Detailed and comprehensive factor evaluation mechanism
+- Support backtesting and provide a complete assessment of the backtesting results
+- Involves combination optimization based on effective factors and strategy formulation (during the trial stage)
+- Provide real-time trading interface, which using QMT
 
 ---
 
 ## 📁 Project Structure
+```
+G1VENQUANT/
+├── data/
+│   ├── raw/
+│   └── tushare_selected_stocks/
+├── factor_results/
+├── figures/
+├── src/
+├── studynotes/
+├── tutorial/
+├── LICENSE
+├── README.md
+└── requirement.txt
+```
+## Data download
+> The Shanghai Stock Exchange and the Shenzhen Stock Exchange have complete intellectual property rights over Level-1 and Level-2 market data. According to the Securities Law and the data usage agreement of the exchanges, unauthorized scraping, resale, or large-scale distribution all constitute infringement. The data interfaces of the exchanges are mainly for institutional users and securities firms, and individual users need to obtain the data through third-party platforms. This project uses Tushare for data download.
+
+## Factor Construction
+
+## Factor Evaluation
+
+## Backtesting
+
+## Real-time trading interface
 
 ## ⭐ Stars
 [![Star History Chart](https://api.star-history.com/svg?repos=MKCorleonE/G1VENQUANT&type=Date&theme=dark)](https://star-history.com/#MKCorleonE/G1VENQUANT&Date)
