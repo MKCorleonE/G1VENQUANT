@@ -2,8 +2,7 @@
 """
 作者: 梁嘉文
 项目: G1VENQUANT
-功能: 在小市值股票池中构建因子并计算IC值
-依赖: 已通过前序脚本下载 ./data/tushare_small_cap_stocks/*.csv
+功能: 在小市值股票池的前15支股票中构建因子并计算IC值（快速验证）
 """
 
 import os
@@ -15,11 +14,16 @@ warnings.filterwarnings('ignore')
 
 DATA_DIR = "./data/tushare_small_cap_stocks"
 
-def load_all_stock_data():
-    """加载所有已下载的小市值股票数据"""
+def load_all_stock_data(n_stocks=15):
+    """加载前 n_stocks 支小市值股票数据（按文件名排序）"""
     files = [f for f in os.listdir(DATA_DIR) if f.endswith('.csv') and f != 'all_stocks_market_cap.csv']
+    if not files:
+        raise FileNotFoundError("未找到股票数据文件，请确认已运行数据下载脚本")
+    files = sorted(files)[:n_stocks]
+    print(f"将分析以下 {len(files)} 支股票: {', '.join([f.replace('.csv','') for f in files])}")
+    
     stock_data = {}
-    for file in tqdm(files, desc="加载股票数据"):
+    for file in tqdm(files, desc=f"加载前 {n_stocks} 支股票"):
         symbol = file.replace('.csv', '')
         df = pd.read_csv(os.path.join(DATA_DIR, file), parse_dates=['datetime'])
         df = df.sort_values('datetime').reset_index(drop=True)
@@ -28,79 +32,81 @@ def load_all_stock_data():
 
 def compute_factors(df):
     """为单只股票计算多个因子"""
-    df = df.copy()
-    # 收益率
-    df['ret_1'] = df['close'].pct_change()  # 当日收益（用于后续计算未来收益）
+    df = df.copy() # 避免修改原始数据
+    df['ret_1'] = df['close'].pct_change()
     
-    # ===== 因子1: 20日动量（过去20日累计收益）=====
+    # 因子1: 20日动量
     df['mom_20'] = df['close'].pct_change(periods=20)
-    
-    # ===== 因子2: 5日反转（过去5日累计收益，负向预期）=====
+    # 因子2: 5日反转
     df['reverse_5'] = df['close'].pct_change(periods=5)
-    
-    # ===== 因子3: 20日平均换手率（用 volume / 流通股本，但无流通股本 → 用成交额替代）=====
-    # 若无 amount 字段，可用 volume 近似（注意单位）
-    if 'amount' in df.columns and df['amount'].notna().any():
-        df['turnover_20'] = df['amount'].rolling(20).mean()
-    else:
-        df['turnover_20'] = df['volume'].rolling(20).mean()  # 粗略替代
-    
-    # ===== 因子4: 20日波动率 =====
+    # 因子3: 20日平均成交额（替代换手率）
+    df['turnover_20'] = df['amount'].rolling(20).mean() if 'amount' in df.columns else df['volume'].rolling(20).mean()
+    # 因子4: 20日波动率
     df['volatility_20'] = df['ret_1'].rolling(20).std()
     
-    # 移除前20行（因子计算需要窗口）
-    df = df.iloc[20:].copy()
-    return df
+    return df.iloc[20:].copy()  # 去掉前20天（窗口不足）
 
 def prepare_cross_sectional_data(stock_data):
-    """将所有股票数据合并为截面数据（日期 x 股票）"""
     all_dfs = []
-    for symbol, df in tqdm(stock_data.items(), desc="计算因子"):
+    for symbol, df in stock_data.items():
         df_factor = compute_factors(df)
         df_factor['symbol'] = symbol
         all_dfs.append(df_factor[['datetime', 'symbol', 'mom_20', 'reverse_5', 'turnover_20', 'volatility_20', 'ret_1']])
     
     panel = pd.concat(all_dfs, ignore_index=True)
-    # 计算下一期收益（用于IC：因子 vs 下期收益）
     panel['future_ret'] = panel.groupby('symbol')['ret_1'].shift(-1)
-    return panel
+    return panel.dropna(subset=['future_ret'])  # 删除最后一天（无未来收益）
 
 def calculate_ic(panel):
-    """计算每个因子的IC序列"""
     factors = ['mom_20', 'reverse_5', 'turnover_20', 'volatility_20']
     ic_results = {}
-    
     for factor in factors:
         ic_series = panel.groupby('datetime').apply(
-            lambda x: x[factor].corr(x['future_ret'], method='spearman')  # 使用Spearman更稳健
+            lambda x: x[factor].corr(x['future_ret'], method='spearman')
         )
         ic_results[factor] = ic_series.dropna()
-    
     return ic_results
 
 def main():
-    print("正在加载所有小市值股票数据...")
-    stock_data = load_all_stock_data()
+    print("🚀 开始小样本因子IC分析（前15支股票）...")
+    stock_data = load_all_stock_data(n_stocks=15)
     
-    print("正在计算因子和未来收益...")
+    print("正在计算因子...")
     panel = prepare_cross_sectional_data(stock_data)
-    print(f"截面数据规模: {panel.shape}")
+    print(f"✅ 截面数据构建完成: {panel['datetime'].nunique()} 个交易日, {panel.shape[0]} 条记录")
     
     print("正在计算IC...")
     ic_results = calculate_ic(panel)
     
-    # 输出IC统计
-    print("\n===== 因子IC分析结果 =====")
+    print("\n" + "="*60)
+    print("📊 因子IC分析结果（小样本）")
+    print("="*60)
     for factor, ic in ic_results.items():
+        if len(ic) == 0:
+            print(f"{factor:15s} | 无有效IC数据")
+            continue
         ic_mean = ic.mean()
         ic_std = ic.std()
-        ir = ic_mean / ic_std if ic_std != 0 else np.nan
-        print(f"{factor:15s} | IC均值: {ic_mean:6.4f} | IR: {ir:6.2f} | 有效天数: {len(ic)}")
+        ir = ic_mean / ic_std if ic_std > 1e-6 else np.nan
+        t_stat = ic_mean / (ic_std / np.sqrt(len(ic))) if ic_std > 1e-6 else np.nan
+        print(f"{factor:15s} | IC均值: {ic_mean:7.4f} | IR: {ir:6.2f} | t-stat: {t_stat:6.2f} | 天数: {len(ic)}")
     
-    # 可选：保存IC序列
-    ic_df = pd.DataFrame(ic_results)
-    ic_df.to_csv(os.path.join(DATA_DIR, "factor_ic_series.csv"))
-    print(f"\nIC序列已保存至: {os.path.join(DATA_DIR, 'factor_ic_series.csv')}")
+    # 可选：画IC时间序列（需 matplotlib）
+    try:
+        import matplotlib.pyplot as plt
+        plt.figure(figsize=(12, 6))
+        for factor, ic in ic_results.items():
+            if len(ic) > 0:
+                ic.plot(label=factor, alpha=0.7)
+        plt.axhline(0, color='k', linestyle='--', linewidth=0.8)
+        plt.title("因子IC时间序列（前15支小市值股票）")
+        plt.ylabel("Spearman IC")
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(os.path.join(DATA_DIR, "factor_ic_plot.png"), dpi=150)
+        print(f"\n📈 IC时间序列图已保存至: {os.path.join(DATA_DIR, 'factor_ic_plot.png')}")
+    except ImportError:
+        pass
 
 if __name__ == "__main__":
     main()

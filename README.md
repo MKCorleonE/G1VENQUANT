@@ -52,5 +52,8 @@ G1VENQUANT/
 
 ## Real-time trading interface
 
+## Acknowledgments
+Thanks to the data support provided by Tushare, it has been of great help to students in school and junior quantitative researchers.
+
 ## ⭐ Stars
 [![Star History Chart](https://api.star-history.com/svg?repos=MKCorleonE/G1VENQUANT&type=Date&theme=dark)](https://star-history.com/#MKCorleonE/G1VENQUANT&Date)
