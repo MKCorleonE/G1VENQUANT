@@ -34,6 +34,13 @@ G1VENQUANT/
 ├── README.md
 └── requirement.txt
 ```
+
+## The ongoing work
+- Obtain the st stock pool
+- Subdivide the small-cap stock pool by industry
+- Constructing small-cap market momentum factor
+- Construct a small-cap market return test portfolio
+
 ## Data download
 > The Shanghai Stock Exchange and the Shenzhen Stock Exchange have complete intellectual property rights over Level-1 and Level-2 market data. According to the Securities Law and the data usage agreement of the exchanges, unauthorized scraping, resale, or large-scale distribution all constitute infringement. The data interfaces of the exchanges are mainly for institutional users and securities firms, and individual users need to obtain the data through third-party platforms. This project uses Tushare for data download.
 

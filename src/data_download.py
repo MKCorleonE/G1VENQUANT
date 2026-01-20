@@ -11,7 +11,7 @@ import pandas as pd
 from tqdm import tqdm
 
 # ======= 配置区 =======
-TOKEN = "9bb81649792cc92d8e0ed2a5789d47b4bcd74a53b224ce44f3a4e0e6"  # pro版本token
+TOKEN = "12e92cd92a1346d0cb14cff8cd574f709d642b52d15c6f5ebb2255ce"  # pro版本token
 DATA_DIR = "./data/tushare_selected_stocks"  # 数据保存目录
 START_DATE = "20150101" #起始日期
 END_DATE = "20251231" #结束日期
@@ -25,6 +25,7 @@ SELECTED_STOCKS = [
     '000858.SZ',  # 五粮液
     '601318.SH',  # 中国平安
     '000333.SZ',  # 美的集团
+    '300308.SZ',  # 中际旭创
     # 可以在这里继续添加
 ]
 
