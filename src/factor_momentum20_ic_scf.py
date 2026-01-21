@@ -11,8 +11,15 @@ import numpy as np
 from tqdm import tqdm
 import warnings
 warnings.filterwarnings('ignore')
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-DATA_DIR = "./data/tushare_small_cap_stocks"
+# ====== 关键参数：设定分析的时间窗口 ======
+START_ANALYSIS_DATE = "2021-01-01"   # 可改为 "2023-01-01" 用最近3年
+END_ANALYSIS_DATE = "2025-12-31"     # 与你下载数据的截止日一致
+
+DATA_DIR = "./data/tushare_small_cap_stocks"  # 请根据实际情况修改数据目录
+FIGURE_DIR = "./figures" # 图表保存目录
 
 def load_all_stock_data(n_stocks=15):
     """加载前 n_stocks 支小市值股票数据（按文件名排序）"""
@@ -55,6 +62,11 @@ def prepare_cross_sectional_data(stock_data):
     
     panel = pd.concat(all_dfs, ignore_index=True)
     panel['future_ret'] = panel.groupby('symbol')['ret_1'].shift(-1)
+    # 仅保留分析期内的数据
+    panel = panel[
+        (panel['datetime'] >= START_ANALYSIS_DATE) & 
+        (panel['datetime'] <= END_ANALYSIS_DATE)
+    ].copy()
     return panel.dropna(subset=['future_ret'])  # 删除最后一天（无未来收益）
 
 def calculate_ic(panel):
@@ -66,6 +78,27 @@ def calculate_ic(panel):
         )
         ic_results[factor] = ic_series.dropna()
     return ic_results
+
+def plot_factors_trend(panel):
+    factors = ['mom_20', 'reverse_5', 'turnover_20', 'volatility_20']
+    
+    for factor in factors:
+        plt.figure(figsize=(14, 7))
+        # 设置风格
+        sns.set_theme(style="whitegrid")
+        
+        # 对于每个因子，计算每个月的平均值以观察长期趋势
+        monthly_avg = panel.groupby([pd.Grouper(key='datetime', freq='M')])[factor].mean()
+        
+        # 绘制时间序列图
+        sns.lineplot(data=monthly_avg)
+        plt.title(f'{factor} 的周期性趋势')
+        plt.xlabel('日期')
+        plt.ylabel(factor)
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        plt.show()
+        plt.savefig(os.path.join(FIGURE_DIR, f"{factor}_trend.png"), dpi=150)
 
 def main():
     print("🚀 开始小样本因子IC分析（前15支股票）...")
@@ -91,22 +124,8 @@ def main():
         t_stat = ic_mean / (ic_std / np.sqrt(len(ic))) if ic_std > 1e-6 else np.nan
         print(f"{factor:15s} | IC均值: {ic_mean:7.4f} | IR: {ir:6.2f} | t-stat: {t_stat:6.2f} | 天数: {len(ic)}")
     
-    # 可选：画IC时间序列（需 matplotlib）
-    try:
-        import matplotlib.pyplot as plt
-        plt.figure(figsize=(12, 6))
-        for factor, ic in ic_results.items():
-            if len(ic) > 0:
-                ic.plot(label=factor, alpha=0.7)
-        plt.axhline(0, color='k', linestyle='--', linewidth=0.8)
-        plt.title("因子IC时间序列（前15支小市值股票）")
-        plt.ylabel("Spearman IC")
-        plt.legend()
-        plt.tight_layout()
-        plt.savefig(os.path.join(DATA_DIR, "factor_ic_plot.png"), dpi=150)
-        print(f"\n📈 IC时间序列图已保存至: {os.path.join(DATA_DIR, 'factor_ic_plot.png')}")
-    except ImportError:
-        pass
+    if 'panel' in locals():
+        plot_factors_trend(panel)
 
 if __name__ == "__main__":
     main()
